@@ -1,0 +1,14 @@
+[package]
+name = "progressProvider"
+version = "0.1.0"
+authors = ["Jonathan McErloy <jmcelroy@datasystemstx.com>"]
+
+[dependencies]
+nickel = "*"
+walkdir = "*"
+rustc-serialize = "*"
+regex = "*"
+
+[dependencies.hyper]
+version = "*"
+default-features = false
