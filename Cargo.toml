@@ -8,6 +8,7 @@ nickel = "*"
 walkdir = "*"
 rustc-serialize = "*"
 regex = "*"
+rust-ini = "*"
 
 [dependencies.hyper]
 version = "*"
