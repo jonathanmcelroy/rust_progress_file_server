@@ -9,6 +9,7 @@ walkdir = "*"
 rustc-serialize = "*"
 regex = "*"
 rust-ini = "*"
+docopt = "*"
 
 [dependencies.hyper]
 version = "*"

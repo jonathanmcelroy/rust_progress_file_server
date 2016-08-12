@@ -5,6 +5,7 @@ extern crate rustc_serialize;
 extern crate walkdir;
 extern crate regex;
 extern crate ini;
+extern crate docopt;
 
 use nickel::{Nickel, HttpRouter, Mountable};
 use std::path::Path;
@@ -12,14 +13,28 @@ use rustc_serialize::json;
 use walkdir::WalkDir;
 use regex::Regex;
 use ini::Ini;
+use std::fs::File;
+use std::io::Read;
+use docopt::Docopt;
 
-const PATH: &'static str = "C:/stec82";
+#[derive(Debug)]
+enum Error {
+    Io(std::io::Error),
+    Ini(&'static str, ini::ini::Error),
+    Hyper(hyper::Error),
+    General(&'static str),
+}
 
-fn get_propath() -> Result<Vec<String>, Error> {
-    let mut stec_ini = try!(get_file(concat!(PATH, "/stec.ini")));
-    stec_ini = stec_ini.replace("\\", "/");
-    
-    let conf = try!(Ini::load_from_str(&stec_ini).map_err(|err| Error::Ini("Could not parse ini file", err)));
+fn get_propath(root_path: &str) -> Result<Vec<String>, Error> {
+    let mut path = String::from(root_path);
+    path.push_str("/stec.ini");
+    let mut stec_ini = try!(File::open(path).map_err(|err| Error::Io(err)));
+
+    let mut stec_ini_contents = String::new();
+    stec_ini.read_to_string(&mut stec_ini_contents);
+    stec_ini_contents = stec_ini_contents.replace("\\", "/");
+
+    let conf = try!(Ini::load_from_str(&stec_ini_contents).map_err(|err| Error::Ini("Could not parse ini file", err)));
 
     conf.section(Some("Startup"))
         .and_then(|section| section.get("PROPATH"))
@@ -27,10 +42,19 @@ fn get_propath() -> Result<Vec<String>, Error> {
         .ok_or(Error::General("No PROPATH field"))
 }
 
+const USAGE: &'static str = "
+Usage: main <ip> <path>
+";
+
 fn main() {
+    let args = Docopt::new(USAGE).unwrap().parse().unwrap();
+    let root_path = String::from(args.get_str("<path>"));
+    let propath = get_propath(&root_path).unwrap();
+
     let mut server = Nickel::new();
 
-    server.mount("/file/", middleware! { |req, res| {
+    let file_regex = Regex::new("/file/(?P<file>.+)").unwrap();
+    server.mount(file_regex, middleware! { |req, res| {
         // let mut path = String::from(PATH);
         // path.push_str(&req.origin.uri.to_string());
 
@@ -56,7 +80,7 @@ fn main() {
     server.get(find_regex, middleware! { |req, res| {
         let contents : &str = &req.param("contents").unwrap().replace("%2F", "/");
         let mut results = vec!();
-        for entry in WalkDir::new(PATH).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&root_path).into_iter().filter_map(|e| e.ok()) {
             // println!("File: {:?}, {:?}", entry, entry.file_name());
             if entry.file_type().is_file() && (entry.file_name() == contents) {
                 results.push(String::from(entry.path().to_str().unwrap()));
@@ -65,5 +89,6 @@ fn main() {
         return res.send(json::encode(&results).unwrap());
     }});
 
-    server.listen("192.168.221.80:3000");
+    let ip = args.get_str("<ip>");
+    server.listen(ip);
 }
