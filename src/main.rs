@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use docopt::Docopt;
 use ini::Ini;
 use nickel::{Nickel, HttpRouter, Mountable};
+use nickel::status::StatusCode;
 use regex::Regex;
 use rustc_serialize::json;
 use walkdir::WalkDir;
@@ -43,7 +44,6 @@ fn get_progress_file_path(file_path: &Path, propath: &Vec<PathBuf>) -> ProgressR
     for prefix_path in propath {
         let mut path = prefix_path.to_owned();
         path.push(file_path);
-        println!("{:?}: {}", path, path.exists());
         if path.exists() {
             return Ok(path);
         }
@@ -89,9 +89,10 @@ fn main() {
         let file_path = PathBuf::from(req.param("file").unwrap()
                                       .replace("%2F", "/")
                                       .replace("%5C", "/"));
-        let path = get_progress_file_path(&file_path, &propath).unwrap();
-        return res.send_file(path);
-
+        return match get_progress_file_path(&file_path, &propath) {
+            Ok(path) => res.send_file(path),
+            Err(err) => res.error(StatusCode::NotFound, "File not found")
+        }
     }});
 
     // Find the file based upon its filename
