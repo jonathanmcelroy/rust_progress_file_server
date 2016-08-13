@@ -7,24 +7,20 @@ extern crate regex;
 extern crate ini;
 extern crate docopt;
 
-use nickel::{Nickel, HttpRouter, Mountable};
+use std::fs::File;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+
+use docopt::Docopt;
+use ini::Ini;
+use nickel::{Nickel, HttpRouter, Mountable};
+use regex::Regex;
 use rustc_serialize::json;
 use walkdir::WalkDir;
-use regex::Regex;
-use ini::Ini;
-use std::fs::File;
-use std::io::Read;
-use docopt::Docopt;
 
-#[derive(Debug)]
-enum Error {
-    Io(std::io::Error),
-    Ini(&'static str, ini::ini::Error),
-    Hyper(hyper::Error),
-    General(&'static str),
-}
+mod error;
 
+use error::{Error, ProgressResult, unwrap_or_exit};
 
 fn relative_path(path: &Path, root_path: &Path) -> PathBuf {
     let mut result = PathBuf::new();
@@ -43,7 +39,7 @@ fn relative_path(path: &Path, root_path: &Path) -> PathBuf {
     return result;
 }
 
-fn get_progress_file_path(file_path: &Path, propath: &Vec<PathBuf>) -> Result<PathBuf, Error> {
+fn get_progress_file_path(file_path: &Path, propath: &Vec<PathBuf>) -> ProgressResult<PathBuf> {
     for prefix_path in propath {
         let mut path = prefix_path.to_owned();
         path.push(file_path);
@@ -55,16 +51,16 @@ fn get_progress_file_path(file_path: &Path, propath: &Vec<PathBuf>) -> Result<Pa
     return Err(Error::General("File does not exist"));
 }
 
-fn get_propath(root_path: &Path) -> Result<Vec<PathBuf>, Error> {
+fn get_propath(root_path: &Path) -> ProgressResult<Vec<PathBuf>> {
     let mut stec_ini = PathBuf::from(root_path);
     stec_ini.push("stec.ini");
-    let mut stec_ini = try!(File::open(stec_ini).map_err(|err| Error::Io(err)));
+    let mut stec_ini = try!(File::open(stec_ini));
 
     let mut stec_ini_contents = String::new();
     stec_ini.read_to_string(&mut stec_ini_contents);
     stec_ini_contents = stec_ini_contents.replace("\\", "/");
 
-    let conf = try!(Ini::load_from_str(&stec_ini_contents).map_err(|err| Error::Ini("Could not parse ini file", err)));
+    let conf = try!(Ini::load_from_str(&stec_ini_contents));
 
     conf.section(Some("Startup"))
         .and_then(|section| section.get("PROPATH"))
@@ -81,9 +77,9 @@ Usage: main <ip> <path>
 ";
 
 fn main() {
-    let args = Docopt::new(USAGE).unwrap().parse().unwrap();
+    let args = unwrap_or_exit(Docopt::new(USAGE).unwrap().parse());
     let root_path = PathBuf::from(args.get_str("<path>"));
-    let propath = get_propath(&root_path).unwrap();
+    let propath = unwrap_or_exit(get_propath(&root_path));
 
     let mut server = Nickel::new();
 
