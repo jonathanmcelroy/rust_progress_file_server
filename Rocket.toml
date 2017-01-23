@@ -1,0 +1,5 @@
+[development]
+address = "192.168.223.181"
+port = 3000
+log = "normal"
+stec_root = "C:/stec82"
