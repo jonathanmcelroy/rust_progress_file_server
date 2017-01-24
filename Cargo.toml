@@ -13,6 +13,11 @@ rust-ini = "*"
 docopt = "*"
 url = "*"
 
+[dependencies.rocket_contrib]
+version = "*"
+default-features = false
+features = ["json"]
+
 [dependencies.hyper]
 version = "*"
 default-features = false

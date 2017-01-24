@@ -1,6 +1,7 @@
 #![feature(plugin)]
 #![plugin(rocket_codegen)]
 
+#[macro_use] extern crate rocket_contrib;
 extern crate rocket;
 extern crate hyper;
 extern crate rustc_serialize;
@@ -16,24 +17,26 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use rocket::Rocket;
+use rocket::response::NamedFile;
 use rocket::config::{active, Config, Environment, Value};
+use rocket_contrib::JSON;
 use docopt::Docopt;
 use ini::Ini;
 // use regex::Regex;
 // use rustc_serialize::json;
-// use walkdir::WalkDir;
+use walkdir::WalkDir;
 use url::Url;
 
 mod error;
 
 use error::{Error, ProgressResult};
 
-fn get_propath_from_config() -> ProgressResult<Vec<PathBuf>> {
+fn get_stec_root_from_config() -> ProgressResult<PathBuf> {
     let config = active().ok_or(Error::General("No config file"))?;
     for (key, value) in config.extras() {
         if key == "stec_root" {
             if let &Value::String(ref stec_root) = value {
-                return get_propath(Path::new(stec_root));
+                return Ok(PathBuf::from(stec_root.to_string()));
             } else {
                 return Err(Error::General("stec_root not a string in config file"));
             }
@@ -42,7 +45,11 @@ fn get_propath_from_config() -> ProgressResult<Vec<PathBuf>> {
     return Err(Error::General("No stec_root in config file"));
 }
 
-/*
+fn get_propath_from_config() -> ProgressResult<Vec<PathBuf>> {
+    let stec_root = get_stec_root_from_config()?;
+    return get_propath(&stec_root);
+}
+
 fn relative_path(path: &Path, root_path: &Path) -> PathBuf {
     let mut result = PathBuf::new();
 
@@ -59,7 +66,6 @@ fn relative_path(path: &Path, root_path: &Path) -> PathBuf {
     result.push(i_path);
     return result;
 }
-*/
 
 fn get_progress_file_path(file_path: &Path, propath: &Vec<PathBuf>) -> ProgressResult<PathBuf> {
     for prefix_path in propath {
@@ -98,53 +104,27 @@ fn get_propath(root_path: &Path) -> ProgressResult<Vec<PathBuf>> {
 }
 
 #[get("/file/<file_path..>")]
-fn get_file(file_path: PathBuf) -> ProgressResult<String> {
+fn get_file(file_path: PathBuf) -> ProgressResult<NamedFile> {
     let propath = get_propath_from_config()?;
-    let full_path = get_progress_file_path(&file_path, &propath)?;
-    Ok(full_path.to_string_lossy().into_owned())
+    let full_path = get_progress_file_path(&file_path, &propath)?.to_string_lossy().into_owned();
+    Ok(NamedFile::open(full_path)?)
 }
 
-fn run() -> ProgressResult<()> {
-    // Get the file in the propath
-    //let file_regex = Regex::new("/file/(?P<file>.+)").unwrap();
-    //server.get(file_regex, middleware! { |req, res| { "testing" }});
-        /*let file_path = PathBuf::from(req.param("file").unwrap()
-                                      .replace("%2F", "/")
-                                      .replace("%5C", "/"));
-        return match get_progress_file_path(&file_path, &propath) {
-            Ok(path) => res.send_file(path),
-            Err(err) => res.error(StatusCode::NotFound, "File not found")
+#[get("/find/<query>", format="application/json")]
+fn find_file(query: String) -> ProgressResult<JSON<Vec<String>>> {
+    let stec_root = get_stec_root_from_config()?;
+    let mut results = vec!();
+    for entry in WalkDir::new(&stec_root).into_iter().filter_map(|e| e.ok()) {
+        let file_name : String = entry.file_name().to_string_lossy().into_owned();
+        if entry.file_type().is_file() && file_name.contains(&query) {
+            let path = String::from(relative_path(entry.path(), &stec_root).to_str().unwrap());
+            results.push(path);
         }
-    }});
-    */
-
-    /*
-    // Find the file based upon its filename
-    let find_regex = Regex::new("/find/(?P<contents>.+)").unwrap();
-    server.get(find_regex, middleware! { |req, res| {
-        let contents : &str = &req.param("contents").unwrap().replace("%2F", "/").replace("%5C", "/");
-        let mut results = vec!();
-        for entry in WalkDir::new(&root_path).into_iter().filter_map(|e| e.ok()) {
-            let file_name : String = entry.file_name().to_string_lossy().into_owned();
-            // println!("File: {:?}, {:?}", entry, entry.file_name());
-            if entry.file_type().is_file() && file_name.contains(contents) {
-                let path = String::from(relative_path(entry.path(), &root_path).to_str().unwrap());
-                results.push(path);
-            }
-        }
-        println!("{}: {:?}", contents, results);
-        return res.send(json::encode(&results).unwrap());
-    }});
-    */
-
-    Rocket::ignite().mount("/", routes![get_file]).launch();
-    Ok(())
+    }
+    println!("{}: {:?}", query, results);
+    return Ok(JSON(results));
 }
 
 fn main() {
-    let result = run();
-    if let Err(err) = result {
-        let _ = writeln!(&mut stderr(), "{}", err);
-        exit(1);
-    }
+    Rocket::ignite().mount("/", routes![get_file, find_file]).launch();
 }
