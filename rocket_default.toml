@@ -1,0 +1,5 @@
+[development]
+address = "*"
+port = 3000
+log = "normal"
+stec_root = "/path/to/stec/"
