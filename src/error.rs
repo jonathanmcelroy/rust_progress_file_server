@@ -22,18 +22,18 @@ pub enum FromError {
 #[derive(Debug)]
 pub enum Error {
     FromError(FromError),
-    FromErrorMessage(FromError, &'static str),
-    General(&'static str),
+    FromErrorMessage(FromError, String),
+    General(String),
 }
 
 impl Error {
-    pub fn new(s: &'static str) -> Self {
-        Error::General(s)
+    pub fn new<S>(s: S) -> Self where S: Into<String>{
+        Error::General(s.into())
     }
 
-    pub fn add_message(self, s: &'static str) -> Self {
+    pub fn add_message<S>(self, s: S) -> Self where S: Into<String>{
         match self {
-            Error::FromError(from_error) => Error::FromErrorMessage(from_error, s),
+            Error::FromError(from_error) => Error::FromErrorMessage(from_error, s.into()),
             _ => panic!("Adding a message to an error with a message"),
         }
     }
@@ -83,6 +83,8 @@ impl Display for Error {
     }
 }
 
-pub fn add_message<E>(s: &'static str) -> impl Fn(E) -> Error where Error: From<E> {
-    move |err| Error::from(err).add_message(s)
+pub fn add_message<S, E>(s: S) -> impl FnOnce(E) -> Error where S: Into<String>, Error: From<E> {
+    |err| {
+        Error::from(err).add_message(s)
+    }
 }

@@ -33,17 +33,17 @@ mod error;
 use error::{Error, ProgressResult, add_message};
 
 fn get_stec_root_from_config() -> ProgressResult<PathBuf> {
-    let config = active().ok_or(Error::General("No Rocket.toml file"))?;
+    let config = active().ok_or(Error::new("No Rocket.toml file"))?;
     for (key, value) in config.extras() {
         if key == "stec_root" {
             if let &Value::String(ref stec_root) = value {
                 return Ok(PathBuf::from(stec_root.to_string()));
             } else {
-                return Err(Error::General("stec_root not a string in config file"));
+                return Err(Error::new("stec_root not a string in config file"));
             }
         }
     }
-    return Err(Error::General("No stec_root in Rocket.toml"));
+    return Err(Error::new("No stec_root in Rocket.toml"));
 }
 
 fn get_propath_from_config() -> ProgressResult<Vec<PathBuf>> {
@@ -76,14 +76,14 @@ fn get_progress_file_path(file_path: &Path, propath: &Vec<PathBuf>) -> ProgressR
             return Ok(path);
         }
     }
-    return Err(Error::General("File does not exist"));
+    return Err(Error::new(format!("The file '{}' does not exist", file_path.to_string_lossy())));
 }
 
 fn get_propath(root_path: &Path) -> ProgressResult<Vec<PathBuf>> {
     // Get the stec.ini file
     let mut stec_ini = PathBuf::from(root_path);
     stec_ini.push("stec.ini");
-    let mut stec_ini = File::open(stec_ini).map_err(add_message("Could not find stec.ini"))?;
+    let mut stec_ini = File::open(stec_ini.clone()).map_err(add_message(format!("Could not find {}", stec_ini.to_string_lossy())))?;
 
     // Try to read the contents
     let mut stec_ini_contents = String::new();
@@ -101,14 +101,14 @@ fn get_propath(root_path: &Path) -> ProgressResult<Vec<PathBuf>> {
             path.push(s);
             return path;
         }).collect())
-        .ok_or(Error::General("No PROPATH field"))
+        .ok_or(Error::new("No PROPATH field"))
 }
 
 #[get("/file/<file_path..>")]
 fn get_file(file_path: PathBuf) -> ProgressResult<NamedFile> {
     let propath = get_propath_from_config()?;
     let full_path = get_progress_file_path(&file_path, &propath)?.to_string_lossy().into_owned();
-    Ok(NamedFile::open(full_path)?)
+    NamedFile::open(full_path.clone()).map_err(add_message(format!("Could not open file '{}'", full_path)))
 }
 
 #[get("/find/<query>", format="application/json")]
