@@ -1,4 +1,5 @@
 #![feature(plugin)]
+#![feature(conservative_impl_trait)]
 #![plugin(rocket_codegen)]
 
 #[macro_use] extern crate rocket_contrib;
@@ -29,10 +30,10 @@ use url::Url;
 
 mod error;
 
-use error::{Error, ProgressResult};
+use error::{Error, ProgressResult, add_message};
 
 fn get_stec_root_from_config() -> ProgressResult<PathBuf> {
-    let config = active().ok_or(Error::General("No config file"))?;
+    let config = active().ok_or(Error::General("No Rocket.toml file"))?;
     for (key, value) in config.extras() {
         if key == "stec_root" {
             if let &Value::String(ref stec_root) = value {
@@ -42,7 +43,7 @@ fn get_stec_root_from_config() -> ProgressResult<PathBuf> {
             }
         }
     }
-    return Err(Error::General("No stec_root in config file"));
+    return Err(Error::General("No stec_root in Rocket.toml"));
 }
 
 fn get_propath_from_config() -> ProgressResult<Vec<PathBuf>> {
@@ -82,7 +83,7 @@ fn get_propath(root_path: &Path) -> ProgressResult<Vec<PathBuf>> {
     // Get the stec.ini file
     let mut stec_ini = PathBuf::from(root_path);
     stec_ini.push("stec.ini");
-    let mut stec_ini = File::open(stec_ini)?;
+    let mut stec_ini = File::open(stec_ini).map_err(add_message("Could not find stec.ini"))?;
 
     // Try to read the contents
     let mut stec_ini_contents = String::new();
