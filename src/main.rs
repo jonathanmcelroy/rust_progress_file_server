@@ -116,10 +116,13 @@ fn find_file(query: String) -> ProgressResult<JSON<Vec<String>>> {
     let stec_root = get_stec_root_from_config()?;
     let mut results = vec!();
     for entry in WalkDir::new(&stec_root).into_iter().filter_map(|e| e.ok()) {
-        let file_name : String = entry.file_name().to_string_lossy().into_owned();
-        if entry.file_type().is_file() && file_name.contains(&query) {
-            let path = String::from(relative_path(entry.path(), &stec_root).to_str().unwrap());
-            results.push(path);
+        let file_name = entry.file_name().to_string_lossy().into_owned();
+        let maybeExtension = entry.path().extension();
+        if let Some(extension) = maybeExtension {
+            if entry.file_type().is_file() && extension != "r" && file_name.contains(&query) {
+                let path = String::from(relative_path(entry.path(), &stec_root).to_str().unwrap());
+                results.push(path);
+            }
         }
     }
     println!("{}: {:?}", query, results);
